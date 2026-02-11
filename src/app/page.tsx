@@ -1,65 +1,181 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect, useCallback } from 'react';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import EffortPill from '@/components/ui/EffortPill';
+import FatigueIndicator from '@/components/ui/FatigueIndicator';
+import GuidanceCallout from '@/components/ui/GuidanceCallout';
+import InsightCard from '@/components/history/InsightCard';
+import { Workout, ScheduleAssignment, CompletionLog } from '@/types/database';
+import { getIntentLabel } from '@/lib/constants/intents';
+import Link from 'next/link';
+
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function getTodayDow(): number {
+  const jsDay = new Date().getDay(); // 0=Sunday
+  return jsDay === 0 ? 6 : jsDay - 1; // 0=Monday
+}
+
+export default function DashboardPage() {
+  const [assignments, setAssignments] = useState<(ScheduleAssignment & { workout: Workout })[]>([]);
+  const [completions, setCompletions] = useState<CompletionLog[]>([]);
+  const [insights, setInsights] = useState<{ type: string; title: string; message: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const todayDow = getTodayDow();
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [schedRes, histRes] = await Promise.all([
+        fetch(`/api/schedule?day=${todayDow}`),
+        fetch(`/api/history?days=7`),
+      ]);
+
+      if (schedRes.ok) {
+        const data = await schedRes.json();
+        setAssignments(data.assignments || []);
+      }
+
+      if (histRes.ok) {
+        const data = await histRes.json();
+        setCompletions(data.completions || []);
+        setInsights(data.insights || []);
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard data', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [todayDow]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleComplete = async (workoutId: string) => {
+    try {
+      const res = await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workout_id: workoutId,
+          context: 'standalone',
+        }),
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (err) {
+      console.error('Failed to log completion', err);
+    }
+  };
+
+  const todayCompletedIds = completions
+    .filter(c => c.completed_date === new Date().toISOString().split('T')[0])
+    .map(c => c.workout_id);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          {DAY_NAMES[todayDow]}
+        </h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+        </p>
+      </div>
+
+      {/* Today's scheduled workouts */}
+      <section>
+        <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+          Today&apos;s Workouts
+        </h2>
+        {assignments.length === 0 ? (
+          <Card>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+              No workouts scheduled for today.
+            </p>
+            <div className="flex justify-center">
+              <Link href="/schedule">
+                <Button variant="ghost" size="sm">Set up schedule</Button>
+              </Link>
+            </div>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {assignments.map((a) => {
+              const isCompleted = todayCompletedIds.includes(a.workout_id);
+              return (
+                <Card key={a.id} className={isCompleted ? 'opacity-60' : ''}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <Link href={`/workouts/${a.workout.id}`} className="block">
+                        <h3 className={`font-medium text-gray-900 dark:text-gray-100 ${isCompleted ? 'line-through' : ''}`}>
+                          {a.workout.name}
+                        </h3>
+                      </Link>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {getIntentLabel(a.workout.primary_intent)}
+                        </span>
+                        <EffortPill effort={a.workout.perceived_effort} />
+                        {a.workout.fatigue_type && (
+                          <FatigueIndicator fatigueType={a.workout.fatigue_type} />
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleComplete(a.workout_id)}
+                      disabled={isCompleted}
+                      className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors touch-manipulation ${
+                        isCompleted
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
+                      }`}
+                    >
+                      {isCompleted && (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Insights */}
+      {insights.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+            Insights
+          </h2>
+          <div className="space-y-2">
+            {insights.map((insight, i) => (
+              <InsightCard key={i} type={insight.type} title={insight.title} message={insight.message} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Quick guidance */}
+      <GuidanceCallout title="Coach's note" variant="info">
+        Supplemental work is meant to complement your main training. If you&apos;re feeling run down,
+        it&apos;s okay to skip or lighten the load on supplemental blocks.
+      </GuidanceCallout>
     </div>
   );
 }
