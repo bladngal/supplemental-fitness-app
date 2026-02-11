@@ -33,6 +33,12 @@ export interface CompatibilityResult {
   suggestion: string;
 }
 
+export interface DayFatigueLoad {
+  totalScore: number;
+  borderClass: string;
+  dotColor: string;
+}
+
 export interface FatigueClassifier {
   classify(input: WorkoutInput): FatigueClassification;
 }

@@ -6,9 +6,18 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import EffortPill from '@/components/ui/EffortPill';
 import GuidanceCallout from '@/components/ui/GuidanceCallout';
-import { Workout, ScheduleAssignment } from '@/types/database';
+import { Workout, ScheduleAssignment, PerceivedEffort } from '@/types/database';
 import { getIntentLabel } from '@/lib/constants/intents';
 import { generateDayGuidance } from '@/lib/engines/guidance-generator';
+import { computeDayFatigueLoad } from '@/lib/engines/fatigue-classifier';
+
+const EFFORT_DOT_COLORS: Record<PerceivedEffort, string> = {
+  very_light: 'bg-green-400',
+  light_focused: 'bg-lime-400',
+  moderate: 'bg-yellow-400',
+  sneaky_hard: 'bg-orange-400',
+  very_taxing: 'bg-red-400',
+};
 
 const DAYS = [
   { dow: 0, short: 'Mon', full: 'Monday' },
@@ -104,6 +113,8 @@ export default function SchedulePage() {
     const dayGuidance = generateDayGuidance(dayWorkouts);
     const day = DAYS[selectedDay];
 
+    const dayFatigue = computeDayFatigueLoad(dayWorkouts);
+
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3">
@@ -114,6 +125,9 @@ export default function SchedulePage() {
           </button>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{day.full}</h1>
           {selectedDay === todayDow && <Badge variant="blue">Today</Badge>}
+          {dayWorkouts.length > 0 && (
+            <span className={`w-2.5 h-2.5 rounded-full ${dayFatigue.dotColor}`} title={`Fatigue load: ${dayFatigue.totalScore}`} />
+          )}
         </div>
 
         {dayGuidance.map((note, i) => (
@@ -196,37 +210,53 @@ export default function SchedulePage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Schedule</h1>
 
-      <div className="grid grid-cols-7 gap-1.5">
+      <div
+        className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 -mx-1 px-1"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
         {DAYS.map(day => {
           const dayAssignments = getAssignmentsForDay(day.dow);
+          const dayWorkouts = dayAssignments.map(a => a.workout).filter(Boolean);
           const isToday = day.dow === todayDow;
+          const fatigue = computeDayFatigueLoad(dayWorkouts);
 
           return (
             <button
               key={day.dow}
               onClick={() => setSelectedDay(day.dow)}
-              className={`rounded-xl border p-2 min-h-[100px] text-left transition-colors touch-manipulation ${
+              className={`min-w-[160px] flex-shrink-0 snap-start rounded-xl border-l-4 p-3 text-left transition-colors touch-manipulation ${fatigue.borderClass} ${
                 isToday
-                  ? 'border-blue-300 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-950/20'
-                  : 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700'
+                  ? 'bg-blue-50/50 dark:bg-blue-950/20 ring-1 ring-blue-400/30'
+                  : 'bg-white dark:bg-gray-900'
               }`}
             >
-              <div className={`text-xs font-medium text-center mb-1.5 ${
-                isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'
-              }`}>
-                {day.short}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-sm font-semibold ${
+                    isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-200'
+                  }`}>
+                    {day.short}
+                  </span>
+                  {isToday && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">
+                      Today
+                    </span>
+                  )}
+                </div>
+                <span className="text-gray-400 dark:text-gray-600 text-lg leading-none">+</span>
               </div>
-              <div className="space-y-0.5">
-                {dayAssignments.slice(0, 3).map(a => (
-                  <div key={a.id} className="text-[10px] text-gray-700 dark:text-gray-300 truncate leading-tight">
-                    {a.workout.name}
+
+              <div className="space-y-1">
+                {dayAssignments.map(a => (
+                  <div key={a.id} className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${EFFORT_DOT_COLORS[a.workout.perceived_effort] || 'bg-gray-400'}`} />
+                    <span className="text-xs text-gray-700 dark:text-gray-300 truncate leading-tight">
+                      {a.workout.name}
+                    </span>
                   </div>
                 ))}
-                {dayAssignments.length > 3 && (
-                  <div className="text-[10px] text-gray-400">+{dayAssignments.length - 3}</div>
-                )}
                 {dayAssignments.length === 0 && (
-                  <div className="text-[10px] text-gray-300 dark:text-gray-700 text-center">—</div>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-600 italic">No workouts</p>
                 )}
               </div>
             </button>
@@ -234,9 +264,10 @@ export default function SchedulePage() {
         })}
       </div>
 
-      <GuidanceCallout title="Scheduling tip" variant="info">
-        Tap a day to see details and add workouts. Try to spread demanding blocks across the week
-        rather than stacking them on the same day.
+      <GuidanceCallout title="Fatigue heat map" variant="info">
+        Look at the fatigue heat on each day. If you see red or orange accents stacking up, you may be
+        concentrating too much demanding supplemental work on certain days. Spreading different fatigue
+        types across the week tends to work better.
       </GuidanceCallout>
     </div>
   );
