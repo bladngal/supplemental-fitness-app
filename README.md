@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Supplemental Fitness App
+
+A personal library and decision-support tool for managing supplemental workout blocks — rehab, mobility, injury prevention, conditioning, and more. It answers the question: **"Where does this fit — and why?"**
+
+Built for people who follow a primary fitness routine and accumulate short supplemental workouts but struggle with where they fit, how fatiguing they really are, and whether stacking them interferes with recovery.
+
+## Features
+
+- **Workout Library** — Catalog supplemental blocks with a guided 6-step intake form covering intent, perceived effort, stress characteristics, frequency, and your lived experience
+- **Fatigue Classification Engine** — Rule-based weighted scoring across muscular and system/CNS axes to classify each workout's fatigue footprint
+- **Placement Guidance** — Recommendations for when to do each block (before main workout, after, standalone, or flexible) with coach-like rationale
+- **Compatibility Analysis** — Pairwise interference detection when stacking multiple blocks on the same day
+- **7-Day Scheduling** — Assign workouts to days of the week with a visual grid overview
+- **Completion Tracking** — Quick-complete from the dashboard with rolling history
+- **Insights** — Frequency consistency, fatigue accumulation, streaks, and missed target detection over 7/14/30-day windows
+- **Coach-Like Language** — All guidance uses probabilistic, advisory language — never rigid rules
+
+## Tech Stack
+
+- **Framework**: Next.js (App Router) + TypeScript + Tailwind CSS
+- **Database**: Supabase (PostgreSQL)
+- **Auth**: PIN-based gate (bcrypt-hashed PIN → JWT cookie)
+- **Fatigue Model**: Rule-based weighted scoring with a swappable `FatigueClassifier` interface
+- **PWA**: Installable via `@ducanh2912/next-pwa`
 
 ## Getting Started
 
-First, run the development server:
+### 1. Set up Supabase
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Create a [Supabase](https://supabase.com) project and run `supabase-schema.sql` in the SQL Editor to create all tables.
+
+### 2. Configure environment
+
+Copy `.env.local.example` or create `.env.local`:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+JWT_SECRET=a_random_secret_string
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Generate a JWT secret with: `openssl rand -base64 32`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Install and run
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev
+```
 
-## Learn More
+Visit `localhost:3000`, set your PIN, and start adding workouts.
 
-To learn more about Next.js, take a look at the following resources:
+## Project Structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+src/
+  app/                    # Next.js App Router pages and API routes
+  components/
+    ui/                   # Button, Card, Badge, BottomNav, etc.
+    workout/              # WorkoutCard, WorkoutForm (6 steps), WorkoutDetail
+    schedule/             # WeekView, ScheduleSlot, CompletionCheckbox
+    history/              # HistoryTimeline, InsightCard
+    guidance/             # PlacementAdvice, CompatibilityMatrix, CoachNote
+  lib/
+    engines/              # Fatigue classifier, placement, compatibility, guidance
+    constants/            # Intents, efforts, stress types, frequencies
+    supabase/             # Client and server helpers
+  hooks/                  # useWorkouts, useSchedule, useHistory, useGuidance, useAuth
+  types/                  # TypeScript type definitions
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Fatigue Classification
 
-## Deploy on Vercel
+The engine scores each workout across two axes:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **Intent base scores** — Each intent has base muscular/system weights
+2. **Effort multiplier** — Scales both axes, with system scaling faster at higher efforts (notably "sneaky hard")
+3. **Stress adjustments** — Each stress characteristic adds to the relevant axis
+4. **Classification** — Muscular ratio >65% → muscular/tissue, <35% → system/CNS, else → mixed
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The engine implements a `FatigueClassifier` interface, making it swappable for an AI-based classifier in the future without changing any other code.
