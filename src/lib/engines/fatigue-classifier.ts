@@ -1,5 +1,5 @@
-import { PrimaryIntent, PerceivedEffort, FatigueType } from '@/types/database';
-import { WorkoutInput, FatigueClassification, FatigueClassifier } from './types';
+import { PrimaryIntent, PerceivedEffort, FatigueType, Workout } from '@/types/database';
+import { WorkoutInput, FatigueClassification, FatigueClassifier, DayFatigueLoad } from './types';
 
 // Base muscular/system scores per intent
 const INTENT_BASE_SCORES: Record<PrimaryIntent, { muscular: number; system: number }> = {
@@ -81,6 +81,37 @@ const classifier = new RuleBasedFatigueClassifier();
 // Convenience function
 export function classifyFatigue(input: WorkoutInput): FatigueClassification {
   return classifier.classify(input);
+}
+
+export function computeDayFatigueLoad(workouts: Workout[]): DayFatigueLoad {
+  if (workouts.length === 0) {
+    return { totalScore: 0, borderClass: 'border-l-gray-600', dotColor: 'bg-gray-500' };
+  }
+
+  let totalScore = 0;
+  for (const w of workouts) {
+    const result = classifyFatigue({
+      primary_intent: w.primary_intent,
+      perceived_effort: w.perceived_effort,
+      stress_impact: w.stress_impact,
+      stress_tendons: w.stress_tendons,
+      stress_localized_muscle: w.stress_localized_muscle,
+      stress_breathing_hr: w.stress_breathing_hr,
+      stress_coordination: w.stress_coordination,
+    });
+    totalScore += result.total_score;
+  }
+
+  if (totalScore <= 8) {
+    return { totalScore, borderClass: 'border-l-green-500', dotColor: 'bg-green-500' };
+  }
+  if (totalScore <= 16) {
+    return { totalScore, borderClass: 'border-l-amber-400', dotColor: 'bg-amber-400' };
+  }
+  if (totalScore <= 24) {
+    return { totalScore, borderClass: 'border-l-orange-500', dotColor: 'bg-orange-500' };
+  }
+  return { totalScore, borderClass: 'border-l-red-500', dotColor: 'bg-red-500' };
 }
 
 export { RuleBasedFatigueClassifier };
